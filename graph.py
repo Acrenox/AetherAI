@@ -1,5 +1,7 @@
 
+import re
 from typing import Literal
+
 from pydantic import BaseModel
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.checkpoint.memory import InMemorySaver
@@ -7,33 +9,29 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_openai import ChatOpenAI
 from langfuse import get_client
 from langfuse.langchain import CallbackHandler
-from dotenv import load_dotenv
-from tools import calculator, web_search
-import os
-import re
 
-load_dotenv()
+from tools import calculator, web_search
+from config import settings
+
 
 # Langfuse initialization
 langfuse = get_client()
 langfuse_handler = CallbackHandler()
 
-# API configuration
-api_key = os.getenv("OPENAI_API_KEY")
 
 # Router response structure
 class RouteDecision(BaseModel):
     category: Literal["research", "calculation", "general"]
 
 
-# Initialize LLM only when API key is available
+# LLM initialization
 llm = None
 router_llm = None
 
-if api_key:
+if settings.openai_api_key:
     llm = ChatOpenAI(
         model="gpt-4.1-mini",
-        api_key=api_key,
+        api_key=settings.openai_api_key,
         temperature=0
     )
 
@@ -162,16 +160,14 @@ workflow.add_edge("research", END)
 workflow.add_edge("calculation", END)
 workflow.add_edge("general", END)
 
+
 # Compile graph
 checkpointer = InMemorySaver()
 app = workflow.compile(checkpointer=checkpointer)
 
 
-# Run agent
+# Run agent independently
 if __name__ == "__main__":
-
-    if not api_key:
-        raise RuntimeError("Please configure OPENAI_API_KEY in your .env file")
 
     config = {
         "configurable": {
@@ -187,20 +183,22 @@ if __name__ == "__main__":
         "What is the latest development in LangGraph?"
     ]
 
-    for query in queries:
+    try:
+        for query in queries:
 
-        response = app.invoke(
-            {
-                "messages": [HumanMessage(content=query)],
-                "query": query,
-                "category": "",
-                "result": ""
-            },
-            config=config
-        )
+            response = app.invoke(
+                {
+                    "messages": [HumanMessage(content=query)],
+                    "query": query,
+                    "category": "",
+                    "result": ""
+                },
+                config=config
+            )
 
-        print("\nQuery:", query)
-        print("Category:", response["category"])
-        print("Result:", response["result"])
+            print("\nQuery:", query)
+            print("Category:", response["category"])
+            print("Result:", response["result"])
 
-    langfuse.flush()
+    finally:
+        langfuse.flush()

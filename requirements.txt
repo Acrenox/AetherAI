@@ -5,3 +5,7 @@ python-dotenv
 #tvily-python
 rich
 langfuse
+fastapi 
+uvicorn[standard]
+pydantic-settings
+tenacity

@@ -1,5 +1,6 @@
 from langchain.tools import tool
 from tavily import TavilyClient
+from tenacity import retry, stop_after_attempt, wait_exponential
 import os
 import ast
 import operator
@@ -59,6 +60,11 @@ def calculator(expression: str) -> str:
         return "Invalid expression"
 
 @tool
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(min=1, max=8),
+    reraise=True
+)
 def web_search(query: str) -> str:
     """Search the web for current information."""
 
