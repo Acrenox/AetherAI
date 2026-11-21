@@ -8,7 +8,8 @@ from fastapi import (
     Header,
     Request
 )
-from fastapi.responses import JSONResponse
+from pathlib import Path
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 
@@ -20,6 +21,9 @@ from langfuse_client import langfuse, langfuse_handler
 
 from graph import app as agent_app
 from config import settings
+
+import json
+from fastapi.responses import StreamingResponse
 
 
 # Rate limiter
@@ -53,7 +57,9 @@ def check_key(x_api_key: str = Header()):
 
 @app.get("/")
 def home():
-    return {"message": "Welcome to AetherAI"}
+    return FileResponse(
+        Path(__file__).parent / "static" / "index.html"
+    )
 
 
 @app.get("/health")
@@ -106,3 +112,99 @@ def ask_agent(request: Request, payload: QueryRequest):
                 status_code=500,
                 detail="Agent execution failed"
             )
+
+
+@app.post("/ask/stream", dependencies=[Depends(check_key)])
+@limiter.limit("10/minute")
+async def stream_agent(request: Request, payload: QueryRequest):
+
+    async def generate():
+
+        thread_id = str(uuid4())
+        final_state = {}
+
+        with langfuse.start_as_current_observation(
+            name="aetherai-stream-request",
+            as_type="span",
+            input={"query": payload.query},
+            metadata={"endpoint": "/ask/stream"}
+        ) as trace:
+
+            try:
+                config = {
+                    "configurable": {
+                        "thread_id": thread_id
+                    },
+                    "callbacks": [langfuse_handler]
+                }
+
+                async for mode, chunk in agent_app.astream(
+                    {
+                        "query": payload.query,
+                        "messages": [
+                            HumanMessage(content=payload.query)
+                        ]
+                    },
+                    config=config,
+                    stream_mode=["messages", "values"]
+                ):
+
+                    # Capture the latest workflow state
+                    if mode == "values":
+                        final_state = chunk
+
+                    # Stream only actual answer tokens
+                    elif mode == "messages":
+
+                        message, metadata = chunk
+                        node = metadata.get("langgraph_node")
+
+                        if node in ["research", "general"]:
+                            content = message.content
+
+                            if isinstance(content, str) and content:
+                                yield (
+                                    f"data: {json.dumps({
+                                        'type': 'token',
+                                        'content': content
+                                    })}\n\n"
+                                )
+
+                result = {
+                    "query": payload.query,
+                    "category": final_state.get("category"),
+                    "result": final_state.get("result")
+                }
+
+                trace.update(output=result)
+
+                # Send final workflow result
+                yield (
+                    f"data: {json.dumps({
+                        'type': 'done',
+                        'data': result
+                    })}\n\n"
+                )
+
+            except Exception as exc:
+
+                trace.update(
+                    level="ERROR",
+                    status_message=str(exc)
+                )
+
+                yield (
+                    f"data: {json.dumps({
+                        'type': 'error',
+                        'message': 'Agent execution failed'
+                    })}\n\n"
+                )
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )

@@ -1,7 +1,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -37,6 +37,16 @@ class RouteDecision(BaseModel):
 class MathExpression(BaseModel):
     expression: str
 
+# --------------------------------------------------
+# Agent Response
+# --------------------------------------------------
+
+class AgentResponse(BaseModel):
+    answer: str
+    category: Literal["research", "calculation", "general"]
+    sources: list[dict[str, str]] = Field(default_factory=list)
+    confidence: float
+
 
 # --------------------------------------------------
 # LLM initialization
@@ -45,28 +55,32 @@ class MathExpression(BaseModel):
 llm = None
 router_llm = None
 math_parser = None
+response_llm = None
 
 if settings.openai_api_key:
 
     llm = ChatOpenAI(
         model="gpt-4.1-mini",
         api_key=settings.openai_api_key,
-        temperature=0
+        temperature=0,
+        streaming=True
     )
 
     router_llm = llm.with_structured_output(RouteDecision)
-
     math_parser = llm.with_structured_output(MathExpression)
-
+    response_llm = llm.with_structured_output(AgentResponse)
 
 # --------------------------------------------------
-# Agent state
+# Agent State
 # --------------------------------------------------
 
 class AgentState(MessagesState):
     query: str
-    category: str
+    category: Literal["research", "calculation", "general"]
     result: str
+    answer: str
+    sources: list[dict[str, str]] = Field(default_factory=list)
+    confidence: float
 
 
 # --------------------------------------------------
@@ -103,17 +117,45 @@ def router_node(state: AgentState):
 # Research node
 # --------------------------------------------------
 
+
 def research_node(state: AgentState):
 
-    result = web_search.invoke({
+    if llm is None:
+        raise RuntimeError("OPENAI_API_KEY is not configured")
+
+    search_results = web_search.invoke({
         "query": state["query"]
     })
 
-    return {
-        "messages": [AIMessage(content=str(result))],
-        "result": str(result)
-    }
+    response = llm.invoke([
+        SystemMessage(content="""
+        You are AetherAI, an AI research assistant.
 
+        Answer the user's question using the supplied
+        search results.
+
+        Instructions:
+        1. Summarize information in simple language.
+        2. Handle multiple questions separately.
+        3. Include important numbers and units.
+        4. Mention the source when available.
+        5. Never invent missing information.
+        6. If information is unavailable, say so.
+        7. Use clear headings and bullet points.
+        """),
+        HumanMessage(content=f"""
+        User question:
+        {state['query']}
+
+        Search results:
+        {search_results}
+        """)
+    ])
+
+    return {
+        "messages": [AIMessage(content=response.content)],
+        "result": response.content
+    }
 
 # --------------------------------------------------
 # Calculation node

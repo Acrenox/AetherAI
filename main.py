@@ -20,7 +20,8 @@ langfuse_handler = CallbackHandler()
 llm = ChatOpenAI(
     model="gpt-4o-mini",
     api_key=api_key,
-    temperature=0
+    temperature=0,
+    streaming=True
 )
 
 checkpointer = InMemorySaver()

@@ -1,0 +1,444 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AetherAI - Research Assistant</title>
+
+    <!-- Markdown rendering and HTML sanitization -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 30px 16px;
+        }
+
+        .container {
+            max-width: 850px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 65px;
+        }
+
+        .logo {
+            font-size: 25px;
+            font-weight: 700;
+            color: #a5b4fc;
+        }
+
+        .status {
+            font-size: 12px;
+            color: #4ade80;
+        }
+
+        .hero {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .hero h1 {
+            font-size: 36px;
+            margin-bottom: 12px;
+        }
+
+        .hero p {
+            color: #94a3b8;
+        }
+
+        .panel {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #cbd5e1;
+        }
+
+        input, textarea {
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid #475569;
+            border-radius: 9px;
+            padding: 13px;
+            color: white;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        textarea {
+            min-height: 130px;
+            resize: vertical;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #818cf8;
+        }
+
+        button {
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 9px;
+            padding: 13px 22px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        button:hover {
+            background: #4f46e5;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .result {
+            margin-top: 25px;
+            padding: 25px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .result h3 {
+            margin-bottom: 15px;
+            color: #a5b4fc;
+            font-size: 24px;
+        }
+
+        .category {
+            display: inline-block;
+            margin-bottom: 18px;
+            padding: 6px 12px;
+            background: #312e81;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+
+        /* Markdown response styling */
+
+        .markdown-body {
+            line-height: 1.8;
+            overflow-wrap: anywhere;
+            font-size: 15px;
+        }
+
+        .markdown-body h1,
+        .markdown-body h2,
+        .markdown-body h3,
+        .markdown-body h4 {
+            color: #a5b4fc;
+            margin: 22px 0 12px;
+            line-height: 1.4;
+        }
+
+        .markdown-body h1 {
+            font-size: 25px;
+        }
+
+        .markdown-body h2 {
+            font-size: 21px;
+        }
+
+        .markdown-body h3 {
+            font-size: 18px;
+        }
+
+        .markdown-body p {
+            margin-bottom: 16px;
+        }
+
+        .markdown-body ul,
+        .markdown-body ol {
+            margin: 10px 0 18px 25px;
+        }
+
+        .markdown-body li {
+            margin-bottom: 8px;
+            padding-left: 5px;
+        }
+
+        .markdown-body strong {
+            color: #c7d2fe;
+        }
+
+        .markdown-body a {
+            color: #818cf8;
+            text-decoration: underline;
+        }
+
+        .markdown-body blockquote {
+            border-left: 3px solid #6366f1;
+            padding-left: 15px;
+            margin: 15px 0;
+            color: #94a3b8;
+        }
+
+        .markdown-body code {
+            background: #1e293b;
+            padding: 3px 6px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        .markdown-body pre {
+            background: #1e293b;
+            border: 1px solid #334155;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+
+        .markdown-body pre code {
+            padding: 0;
+            background: transparent;
+        }
+
+        .markdown-body hr {
+            border: none;
+            border-top: 1px solid #334155;
+            margin: 20px 0;
+        }
+
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+
+        .markdown-body th,
+        .markdown-body td {
+            border: 1px solid #334155;
+            padding: 10px;
+            text-align: left;
+        }
+
+        .markdown-body th {
+            background: #1e293b;
+            color: #a5b4fc;
+        }
+
+        .error {
+            color: #f87171;
+        }
+
+        footer {
+            text-align: center;
+            color: #64748b;
+            margin-top: 35px;
+            font-size: 12px;
+        }
+
+        @media (max-width: 600px) {
+            .hero h1 {
+                font-size: 28px;
+            }
+
+            .panel {
+                padding: 18px;
+            }
+
+            header {
+                margin-bottom: 40px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+
+    <header>
+        <div class="logo">✦ AetherAI</div>
+        <div class="status">● AI Research Assistant</div>
+    </header>
+
+    <section class="hero">
+        <h1>Think. Research. Discover.</h1>
+        <p>Your AI-powered research and calculation assistant.</p>
+    </section>
+
+    <section class="panel">
+
+        <label for="apiKey">API Key</label>
+        <input
+            type="password"
+            id="apiKey"
+            placeholder="Enter your AetherAI API key"
+            autocomplete="off"
+        >
+
+        <label for="query">What would you like to know?</label>
+        <textarea
+            id="query"
+            placeholder="Example: Explain RAG architecture or calculate 450 multiplied by 28..."
+        ></textarea>
+
+        <button id="askButton" onclick="askAetherAI()">
+            Ask AetherAI →
+        </button>
+
+        <div class="result" id="result">
+            <h3>Response</h3>
+            <span class="category" id="category"></span>
+            <div class="markdown-body" id="answer"></div>
+        </div>
+
+    </section>
+
+    <footer>
+        Powered by FastAPI · LangGraph · LangChain · Langfuse
+    </footer>
+
+</div>
+
+<script>
+    // Configure Markdown renderer
+    marked.setOptions({
+        gfm: true,
+        breaks: true
+    });
+
+    let requestInProgress = false;
+
+async function askAetherAI() {
+    if (requestInProgress) return;
+
+    const apiKey = document.getElementById("apiKey").value.trim();
+    const query = document.getElementById("query").value.trim();
+    const button = document.getElementById("askButton");
+    const resultBox = document.getElementById("result");
+    const answer = document.getElementById("answer");
+    const category = document.getElementById("category");
+
+    if (!apiKey || !query) {
+        alert("Please enter your API key and question.");
+        return;
+    }
+
+    requestInProgress = true;
+    button.disabled = true;
+    button.textContent = "Thinking...";
+    resultBox.style.display = "block";
+    answer.textContent = "";
+    category.textContent = "PROCESSING";
+
+    try {
+        const response = await fetch("/ask/stream", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": apiKey
+            },
+            body: JSON.stringify({ query })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || "Request failed");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        let buffer = "";
+        let fullAnswer = "";
+
+        while (true) {
+            const { value, done } = await reader.read();
+
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+
+            const events = buffer.split("\n\n");
+            buffer = events.pop();
+
+            for (const event of events) {
+                const line = event
+                    .split("\n")
+                    .find(line => line.startsWith("data: "));
+
+                if (!line) continue;
+
+                const data = JSON.parse(line.substring(6));
+
+                if (data.type === "token") {
+                    fullAnswer += data.content;
+
+                    answer.innerHTML = DOMPurify.sanitize(
+                        marked.parse(fullAnswer)
+                    );
+                }
+
+                if (data.type === "done") {
+                    if (typeof data.data.result === "string") {
+                        fullAnswer = data.data.result;
+                        answer.innerHTML = DOMPurify.sanitize(
+                            marked.parse(fullAnswer)
+                        );
+                    }
+
+                    category.textContent =
+                        data.data.category.toUpperCase();
+                }
+
+                if (data.type === "error") {
+                    throw new Error(data.message);
+                }
+            }
+        }
+
+        // Flush any remaining decoder data
+        buffer += decoder.decode();
+
+    } catch (error) {
+        answer.textContent = error.message;
+        answer.classList.add("error");
+        category.textContent = "ERROR";
+
+    } finally {
+        requestInProgress = false;
+        button.disabled = false;
+        button.textContent = "Ask AetherAI →";
+    }
+}
+
+
+    // Allow Ctrl+Enter / Cmd+Enter to submit
+    document.getElementById("query").addEventListener("keydown", function(event) {
+        if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            askAetherAI();
+        }
+    });
+</script>
+
+</body>
+</html>

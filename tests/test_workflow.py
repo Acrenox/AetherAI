@@ -42,11 +42,16 @@ def test_research_workflow():
     mock_decision = MagicMock()
     mock_decision.category = "research"
 
+    mock_response = MagicMock()
+    mock_response.content = "Mock synthesized research answer"
+
     with patch("graph.router_llm", autospec=False) as mock_router, \
-         patch("graph.web_search", autospec=False) as mock_search:
+         patch("graph.web_search", autospec=False) as mock_search, \
+         patch("graph.llm", autospec=False) as mock_llm:
 
         mock_router.invoke.return_value = mock_decision
         mock_search.invoke.return_value = "Mock research results"
+        mock_llm.invoke.return_value = mock_response
 
         response = app.invoke(
             {
@@ -59,7 +64,7 @@ def test_research_workflow():
         )
 
     assert response["category"] == "research"
-    assert response["result"] == "Mock research results"
+    assert response["result"] == "Mock synthesized research answer"
 
 def test_general_workflow():
 

@@ -23,12 +23,18 @@ def test_router_node():
 
 
 def test_research_node():
-    with patch("graph.web_search", autospec=False) as mock_search:
+    with patch("graph.web_search", autospec=False) as mock_search, \
+         patch("graph.llm", autospec=False) as mock_llm:
+
         mock_search.invoke.return_value = "Mock search results"
+
+        mock_response = MagicMock()
+        mock_response.content = "Mock synthesized answer"
+        mock_llm.invoke.return_value = mock_response
 
         result = research_node({"query": "Latest AI news"})
 
-    assert result["result"] == "Mock search results"
+    assert result["result"] == "Mock synthesized answer"
 
 
 def test_calculation_node():
