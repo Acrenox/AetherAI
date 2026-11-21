@@ -1,6 +1,6 @@
 from unittest.mock import patch, MagicMock
 from langchain_core.messages import HumanMessage, AIMessage
-from graph import app
+from graph import app, MathExpression
 
 
 def test_calculation_workflow():
@@ -8,21 +8,34 @@ def test_calculation_workflow():
     mock_decision = MagicMock()
     mock_decision.category = "calculation"
 
-    with patch("graph.router_llm", autospec=False) as mock_router:
-        mock_router.invoke.return_value = mock_decision
+    mock_parser = MagicMock()
+    mock_parser.invoke.return_value = MathExpression(
+        expression="450 * 28"
+    )
 
-        response = app.invoke(
-            {
-                "messages": [HumanMessage(content="450 multiplied by 28")],
-                "query": "450 multiplied by 28",
-                "category": "",
-                "result": ""
-            },
-            config={"configurable": {"thread_id": "test_workflow"}}
-        )
+    with patch("graph.router_llm") as mock_router:
+        with patch("graph.math_parser", mock_parser):
 
-    assert response["category"] == "calculation"
+            mock_router.invoke.return_value = mock_decision
+
+            response = app.invoke(
+                {
+                    "messages": [
+                        HumanMessage(content="450 multiplied by 28")
+                    ],
+                    "query": "450 multiplied by 28",
+                    "category": "",
+                    "result": ""
+                },
+                config={
+                    "configurable": {
+                        "thread_id": "test_workflow"
+                    }
+                }
+            )
+
     assert response["result"] == "12600"
+    assert response["category"] == "calculation"
 
 def test_research_workflow():
 

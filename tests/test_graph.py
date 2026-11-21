@@ -1,5 +1,6 @@
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+from graph import calculation_node, MathExpression
 
 from graph import (
     router_node,
@@ -31,7 +32,15 @@ def test_research_node():
 
 
 def test_calculation_node():
-    result = calculation_node({"query": "450 multiplied by 28"})
+    mock_parser = MagicMock()
+    mock_parser.invoke.return_value = MathExpression(
+        expression="450 * 28"
+    )
+
+    with patch("graph.math_parser", mock_parser):
+        result = calculation_node({
+            "query": "450 multiplied by 28"
+        })
 
     assert result["result"] == "12600"
 
