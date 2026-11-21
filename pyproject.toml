@@ -13,3 +13,8 @@ dependencies = [
     "rich>=15.0.0",
     "tavily-python>=0.8.5",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
