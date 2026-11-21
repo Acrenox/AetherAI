@@ -1,41 +1,57 @@
-from typing import TypedDict
-from pydantic import BaseModel
+
 from typing import Literal
+from pydantic import BaseModel
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.checkpoint.memory import InMemorySaver
 from langchain_core.messages import HumanMessage, AIMessage
-from tools import calculator, web_search
 from langchain_openai import ChatOpenAI
 from langfuse import get_client
 from langfuse.langchain import CallbackHandler
 from dotenv import load_dotenv
-import re
+from tools import calculator, web_search
 import os
+import re
 
 load_dotenv()
 
+# Langfuse initialization
 langfuse = get_client()
 langfuse_handler = CallbackHandler()
 
+# API configuration
 api_key = os.getenv("OPENAI_API_KEY")
 
-llm = ChatOpenAI(
-    model="gpt-4.1-mini",
-    api_key=api_key,
-    temperature=0
-)
-
+# Router response structure
 class RouteDecision(BaseModel):
     category: Literal["research", "calculation", "general"]
 
-router_llm = llm.with_structured_output(RouteDecision)
 
+# Initialize LLM only when API key is available
+llm = None
+router_llm = None
+
+if api_key:
+    llm = ChatOpenAI(
+        model="gpt-4.1-mini",
+        api_key=api_key,
+        temperature=0
+    )
+
+    router_llm = llm.with_structured_output(RouteDecision)
+
+
+# Agent state
 class AgentState(MessagesState):
     query: str
     category: str
     result: str
 
+
+# Router node
 def router_node(state: AgentState):
+
+    if router_llm is None:
+        raise RuntimeError("OPENAI_API_KEY is not configured")
 
     query = state["query"]
 
@@ -61,7 +77,10 @@ def router_node(state: AgentState):
 
     return {"category": decision.category}
 
+
+# Research node
 def research_node(state: AgentState):
+
     result = web_search.invoke({
         "query": state["query"]
     })
@@ -71,6 +90,8 @@ def research_node(state: AgentState):
         "result": str(result)
     }
 
+
+# Calculation node
 def calculation_node(state: AgentState):
 
     expression = state["query"].lower()
@@ -98,7 +119,12 @@ def calculation_node(state: AgentState):
     }
 
 
+# General question node
 def general_node(state: AgentState):
+
+    if llm is None:
+        raise RuntimeError("OPENAI_API_KEY is not configured")
+
     response = llm.invoke(state["messages"])
 
     return {
@@ -106,9 +132,13 @@ def general_node(state: AgentState):
         "result": response.content
     }
 
+
+# Conditional routing
 def route_query(state: AgentState):
     return state["category"]
 
+
+# Build LangGraph workflow
 workflow = StateGraph(AgentState)
 
 workflow.add_node("router", router_node)
@@ -132,18 +162,23 @@ workflow.add_edge("research", END)
 workflow.add_edge("calculation", END)
 workflow.add_edge("general", END)
 
+# Compile graph
 checkpointer = InMemorySaver()
-
 app = workflow.compile(checkpointer=checkpointer)
 
-config = {
-    "configurable": {
-        "thread_id": "user_1"
-    },
-    "callbacks": [langfuse_handler]
-}
 
+# Run agent
 if __name__ == "__main__":
+
+    if not api_key:
+        raise RuntimeError("Please configure OPENAI_API_KEY in your .env file")
+
+    config = {
+        "configurable": {
+            "thread_id": "user_1"
+        },
+        "callbacks": [langfuse_handler]
+    }
 
     queries = [
         "What's 450 multiplied by 28?",
@@ -154,14 +189,18 @@ if __name__ == "__main__":
 
     for query in queries:
 
-        response = app.invoke({
-            "messages": [HumanMessage(content=query)],
-            "query": query,
-            "category": "",
-            "result": ""
-        }, config=config)
+        response = app.invoke(
+            {
+                "messages": [HumanMessage(content=query)],
+                "query": query,
+                "category": "",
+                "result": ""
+            },
+            config=config
+        )
 
         print("\nQuery:", query)
         print("Category:", response["category"])
         print("Result:", response["result"])
+
     langfuse.flush()
