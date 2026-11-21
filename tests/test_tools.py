@@ -31,3 +31,10 @@ def test_calculator_multiplication():
 def test_calculator_invalid_expression():
     result = calculator.invoke({"expression": "5 + "})
     assert result == "Invalid expression"
+
+def test_calculator_rejects_python_code():
+    result = calculator.invoke({
+        "expression": "__import__('os').system('whoami')"
+    })
+
+    assert result == "Invalid expression"
